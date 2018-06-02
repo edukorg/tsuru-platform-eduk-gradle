@@ -1,0 +1,55 @@
+#!/bin/bash -el
+
+SOURCE_DIR=/var/lib/tsuru
+source ${SOURCE_DIR}/base/deploy
+source ${SOURCE_DIR}/base/rc/config
+
+source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+SDK_CONF="sdk.conf"
+DEFAULT_GRADLE_VERSION="4.7"
+
+if [ -f "${CURRENT_DIR}/${SDK_CONF}" ]; then
+    while IFS='' read -r line || [[ -n "$line" ]]; do
+        IFS=" "; set -- $line;
+        if [ -n "$1" ]; then
+            sdk=$1
+            if [ -n "$2" ]; then
+                version=$2
+                echo "Installing $sdk sdk version $version..."
+                sdk install $sdk $version
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: failed to install $sdk version $version. Aborting..."
+                    exit 2
+                fi
+            else
+                echo "Installing $sdk default version..."
+                sdk install $sdk
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: failed to install $sdk default version. Aborting..."
+                    exit 2
+                fi
+            fi
+        fi
+    done < ${CURRENT_DIR}/${SDK_CONF}
+else
+    echo "ERROR: ${SDK_CONF} not found. Please, create it and list insed it the gradle sdks to be used. Aborting..."
+    exit 1
+fi
+
+if sdk current gradle | grep 'Not using any version of gradle' > /dev/null; then
+    sdk install gradle $DEFAULT_GRADLE_VERSION
+    if [ $? -ne 0 ]; then
+        echo "ERROR: failed to install the gradle sdk version "
+        exit 3
+    fi
+fi
+
+pushd "$CURRENT_DIR"
+gradle build --console plain --no-daemon --info
+if [ $? -ne 0 ]; then
+    echo "ERROR: failed to build the Gradle project. Aborting..."
+    exit 4
+fi
+popd
+
